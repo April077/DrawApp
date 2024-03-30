@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 
-
 export const useDraw = (onDraw: ({ ctx, currPt, prevPt }: Draw) => void) => {
   const [mouseDown, setMouseDown] = useState(false);
 
@@ -10,7 +9,12 @@ export const useDraw = (onDraw: ({ ctx, currPt, prevPt }: Draw) => void) => {
   const prevPt = useRef<null | Point>(null);
 
   const onMouseDown = () => setMouseDown(true);
-  
+  const clearCanvas = () => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -48,5 +52,5 @@ export const useDraw = (onDraw: ({ ctx, currPt, prevPt }: Draw) => void) => {
       window.removeEventListener("mouseup", mouseuphandler);
     };
   }, [onDraw]);
-  return { canvasRef, onMouseDown };
+  return { canvasRef, onMouseDown, clearCanvas };
 };

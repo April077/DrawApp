@@ -2,46 +2,64 @@
 
 import { useDraw } from "@/hooks/useDraw";
 import React, { useEffect, useState } from "react";
-import { ChromePicker, SketchPicker } from "react-color";
+import { ChromePicker } from "react-color";
 import { Button } from "@/components/ui/button";
+import { drawLine } from "@/util/draw";
+import { io } from "socket.io-client";
 
-function page() {
-  const { canvasRef, onMouseDown } = useDraw(drawLine);
+const socket = io("http://localhost:3001");
+
+type DrawLineProps = {
+  currPt: Point;
+  prevPt: Point | null;
+  color: string;
+};
+
+function Home() {
+  const { canvasRef, onMouseDown, clearCanvas } = useDraw(creatLine);
   const [color, setColor] = useState<string>("#000");
-  const [ctx, setCtx] = useState<CanvasRenderingContext2D | null | undefined>(
-    null
-  );
-
-  function drawLine({ prevPt, currPt, ctx }: Draw) {
-    const lineColor = color;
-    const lineWidth = 5;
-
-    let startPt = prevPt ?? currPt;
-    ctx.strokeStyle = lineColor;
-    ctx.lineWidth = lineWidth;
-    ctx.beginPath();
-    ctx.moveTo(startPt.x, startPt.y);
-    ctx.lineTo(currPt.x, currPt.y);
-    ctx.stroke();
-
-    ctx.fillStyle = lineColor;
-    ctx.beginPath();
-    ctx.arc(startPt.x, startPt.y, 2, 0, 2 * Math.PI);
-    ctx.fill();
-  }
 
   useEffect(() => {
-    const context = canvasRef.current?.getContext("2d");
-    setCtx(context);
-  });
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
 
-  const clearCanvas = () => {
-    if (ctx) {
-      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    }
-  };
+    socket.emit("new-client");
 
-  const handleDownload = ()=>{
+    socket.on("get-state", () => {
+      if (!canvasRef.current?.toDataURL()) return;
+      socket.emit("canvas-data", canvasRef.current?.toDataURL());
+    });
+
+    socket.on("data-from-server", (state: string) => {
+      const img = new Image();
+      img.src = state;
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0);
+      };
+    });
+
+    socket.on("clear", () => {
+      clearCanvas();
+    });
+
+    socket.on("draw-line", ({ prevPt, currPt, color }: DrawLineProps) => {
+      drawLine({ prevPt, currPt, ctx, color });
+    });
+
+    return () => {
+      socket.off("get-state");
+      socket.off("data-from-server");
+      socket.off("clear");
+      socket.off("draw-line");
+    };
+  }, [canvasRef]);
+
+  function creatLine({ ctx, currPt, prevPt }: Draw) {
+    socket.emit("draw-line", { prevPt, currPt, color });
+    drawLine({ prevPt, currPt, ctx, color });
+  }
+
+  const handleDownload = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -52,7 +70,7 @@ function page() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }
+  };
 
   return (
     <div className="p-5 flex justify-center items-center gap-5 bg-white  w-screen h-screen">
@@ -62,7 +80,13 @@ function page() {
           color={color}
           onChange={(e) => setColor(e.hex)}
         />
-        <Button size={"lg"} variant={"outline"} onClick={clearCanvas}>
+        <Button
+          size={"lg"}
+          variant={"outline"}
+          onClick={() => {
+            socket.emit("clear");
+          }}
+        >
           Clear
         </Button>
         <Button size={"lg"} variant={"outline"} onClick={handleDownload}>
@@ -81,4 +105,4 @@ function page() {
   );
 }
 
-export default page;
+export default Home;
